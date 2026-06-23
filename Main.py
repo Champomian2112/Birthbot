@@ -46,6 +46,11 @@ def save_data(node_name, data):
 @client.event
 async def on_ready():
     print(f"ログインしました: {client.user}")
+    
+    # ★ここを追加：ステータスを設定する
+    activity = discord.Game(name="bb!help でコマンド一覧")
+    await client.change_presence(status=discord.Status.online, activity=activity)
+    
     if not check_birthdays.is_running():
         check_birthdays.start()
 
