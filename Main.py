@@ -4,9 +4,10 @@ import json
 from datetime import datetime, time, timezone, timedelta
 import asyncio
 import os
+import datetime as dt_module  # 名前衝突を避けるために追加
 from keep_alive import keep_alive
-import firebase_admin  # ★追加
-from firebase_admin import credentials, db  # ★追加
+import firebase_admin
+from firebase_admin import credentials, db
 
 JST = timezone(timedelta(hours=9))
 NOTIFY_TIME = time(hour=9, minute=0, tzinfo=JST)
@@ -16,24 +17,21 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-# --- ★Firebaseの初期化設定 ---
-# Renderの環境変数からFirebaseの秘密鍵（JSON文字列）を読み込む
+# --- Firebaseの初期化設定 ---
 cred_json = json.loads(os.environ.get('FIREBASE_CREDENTIALS'))
 cred = credentials.Certificate(cred_json)
 firebase_admin.initialize_app(cred, {
     'databaseURL': os.environ.get('FIREBASE_DB_URL')
 })
 
-# ★ファイル名ではなく、データベース内の保存先の名前に変更
-DATA_FILE = "birthdays"
-CONFIG_FILE = "config"
+# 全てのサーバーデータを1つのノード（塊）で管理します
+SERVER_DATA_NODE = "server_data"
 
-# --- ★データ管理用の関数をFirebase仕様に書き換え ---
 def load_data(node_name):
     try:
         ref = db.reference(node_name)
         data = ref.get()
-        return data if data else {}  # データが空なら空の辞書を返す
+        return data if data else {}
     except Exception as e:
         print(f"データ読み込みエラー: {e}")
         return {}
@@ -41,36 +39,32 @@ def load_data(node_name):
 def save_data(node_name, data):
     try:
         ref = db.reference(node_name)
-        ref.set(data)  # クラウド上のデータを上書き保存
+        ref.set(data)
     except Exception as e:
         print(f"データ保存エラー: {e}")
 
 @client.event
 async def on_ready():
     print(f"ログインしました: {client.user}")
-    if not check_birthday.is_running():
-        check_birthday.start()
+    if not check_birthdays.is_running():
+        check_birthdays.start()
 
 @client.event
 async def on_guild_join(guild):
     """ボットがサーバーに参加したときに自動で実行されるイベント"""
-    
-    # ボットがメッセージを送信できる最初のテキストチャンネルを探す
     target_channel = None
     for channel in guild.text_channels:
         if channel.permissions_for(guild.me).send_messages:
             target_channel = channel
             break
 
-    # 送信できるチャンネルが見つからなければ終了
     if target_channel is None:
         return
 
-    # 挨拶とコマンド一覧をリッチな見た目（埋め込みメッセージ）で作成
     embed = discord.Embed(
-        title="🎂 誕生日通知ボットの導入ありがとうございます！",
-        description="このサーバーのみんなの誕生日をお祝いするボットです。まずは通知用のチャンネルを設定してください！",
-        color=discord.Color.from_rgb(255, 182, 193) # ピンク色
+        title="🎂 誕生日通知ボットです！今後何かしら機能追加予定です！",
+        description="このサーバーのみんなの誕生日をお祝いします！まずは通知用のチャンネルを設定してください！",
+        color=discord.Color.from_rgb(255, 182, 193)
     )
     
     embed.add_field(
@@ -86,17 +80,29 @@ async def on_guild_join(guild):
     )
     
     embed.add_field(
-        name="💡 豆知識", 
+        name="💡 このBotについて", 
         value="登録した誕生日は、設定されたチャンネルで毎朝9:00に自動でお祝いされます🎉", 
         inline=False
     )
-    # チャンネルに送信
     await target_channel.send(embed=embed)
+
+@client.event
+async def on_guild_remove(guild):
+    """ボットがサーバーから退出、または追放されたときに自動で実行されるイベント"""
+    data = load_data(SERVER_DATA_NODE)
+    guild_id = str(guild.id)
+    
+    # サーバーIDの部屋があれば、そのサーバーの全データ（チャンネルID・誕生日）を丸ごと削除！
+    if guild_id in data:
+        del data[guild_id]
+        save_data(SERVER_DATA_NODE, data)
+        print(f"サーバー「{guild.name}」から退出したため、すべてのデータを完全に自動消去しました。")
+
 @client.event
 async def on_message(message):
     if message.author.bot:
         return
-    # 既存の on_message の中に追加してください
+
     if message.content == "!help" or message.content == "!menu":
         embed = discord.Embed(
             title="🎂 誕生日通知ボット コマンド一覧",
@@ -107,17 +113,22 @@ async def on_message(message):
         
         await message.channel.send(embed=embed)
         return
-    # ★【新機能】通知チャンネルの設定コマンド
-    # サーバーの管理者だけが実行できるように制限しています
+
+    # 通知チャンネルの設定コマンド
     if message.content == "!setchannel":
         if not message.author.guild_permissions.administrator:
             await message.channel.send("このコマンドは管理権限を持つユーザーのみ実行できます。")
             return
 
-        config = load_data(CONFIG_FILE)
-        # サーバーIDをキーにして、チャンネルIDを保存
-        config[str(message.guild.id)] = message.channel.id
-        save_data(CONFIG_FILE, config)
+        data = load_data(SERVER_DATA_NODE)
+        guild_id = str(message.guild.id)
+
+        # サーバーのデータ構造がなければ初期化
+        if guild_id not in data:
+            data[guild_id] = {"channel_id": None, "birthdays": {}}
+
+        data[guild_id]["channel_id"] = message.channel.id
+        save_data(SERVER_DATA_NODE, data)
 
         await message.channel.send(f"📢今後このチャンネル（{message.channel.mention}）に誕生日通知を送信するよ！")
         return
@@ -128,55 +139,56 @@ async def on_message(message):
             _, date = message.content.split()
             datetime.strptime(date, "%m-%d")
 
-            data = load_data(DATA_FILE)
-            data[str(message.author.id)] = date
-            save_data(DATA_FILE, data)
+            data = load_data(SERVER_DATA_NODE)
+            guild_id = str(message.guild.id)
+            user_id = str(message.author.id)
+
+            # サーバーのデータ構造がなければ初期化
+            if guild_id not in data:
+                data[guild_id] = {"channel_id": None, "birthdays": {}}
+
+            # server_data -> サーバーID -> birthdays -> ユーザーID に保存
+            if "birthdays" not in data[guild_id]:
+                data[guild_id]["birthdays"] = {}
+                
+            data[guild_id]["birthdays"][user_id] = date
+            save_data(SERVER_DATA_NODE, data)
 
             await message.channel.send(f"{message.author.mention} の誕生日を {date} で登録したよ！")
         except ValueError:
             await message.channel.send("使い方: `!birthday 01-23` のように入力してね")
 
-
 # 毎日朝9時に実行されるタスク
 @tasks.loop(time=NOTIFY_TIME)
-async def check_birthday():
-    await client.wait_until_ready()
-    
-    today = datetime.now(JST).strftime("%m-%d")
-    birthday_data = load_data(DATA_FILE)
-    config_data = load_data(CONFIG_FILE)
+async def check_birthdays():
+    today = dt_module.date.today().strftime("%m-%d") 
+    data = load_data(SERVER_DATA_NODE)
 
-    # 登録されているユーザーを一人ずつチェック
-    for user_id, birthday in birthday_data.items():
-        if birthday == today:
-            try:
-                # ユーザーオブジェクトを取得して、その人が所属しているサーバーを探す
-                user = await client.fetch_user(int(user_id))
-                
-                # ボットが参加している全サーバーから、そのユーザーがいるサーバーを探して通知
-                for guild in client.guilds:
-                    member = guild.get_member(user.id) or await guild.fetch_member(user.id).catch(None)
-                    if member:
-                        # そのサーバーの設定済みチャンネルIDを取得
-                        channel_id = config_data.get(str(guild.id))
-                        if not channel_id:
-                            continue  # チャンネルが設定されていないサーバーはスキップ
+    # サーバーごとにデータをチェック
+    for guild_id, guild_data in data.items():
+        channel_id = guild_data.get("channel_id")
+        if not channel_id:
+            continue
 
-                        channel = guild.get_channel(int(channel_id)) or await guild.fetch_channel(int(channel_id))
-                        if channel:
-                            await channel.send(f"🎉 今日は {user.mention} の誕生日だよ！おめでとう！ 🎉")
-            except Exception as e:
-                print(f"エラーが発生しました (ユーザーID: {user_id}): {e}")
+        channel = client.get_channel(int(channel_id))
+        if not channel:
+            continue
 
-# Renderのスリープ回避用のダミーサーバーを起動
+        birthdays_list = guild_data.get("birthdays", {})
+        today_celebrated = []
+        for user_id, b_day in birthdays_list.items():
+            if b_day == today:
+                today_celebrated.append(f"<@{user_id}>")
+
+        if today_celebrated:
+            mentions = ", ".join(today_celebrated)
+            await channel.send(f"🎂【本日のお誕生日】\n{mentions} さん、お誕生日おめでとうございます！🎉")
+
+# ダミーサーバー起動
 keep_alive()
 
-# 環境変数から「DISCORD_TOKEN」という名前の値を読み込む
 TOKEN = os.environ.get('DISCORD_TOKEN')
-
-# トークンが設定されていない場合のエラーチェック（親切設計）
 if TOKEN is None:
     print("エラー: 環境変数 DISCORD_TOKEN が設定されていません。")
 else:
-    # ボットを起動
     client.run(TOKEN)
