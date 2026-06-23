@@ -182,6 +182,8 @@ async def check_birthdays():
 
         if today_celebrated:
             mentions = ", ".join(today_celebrated)
+            month = today.split("-")[0].lstrip("0") # "06" -> "6"
+            day = today.split("-")[1].lstrip("0")   # "23" -> "23"
             await channel.send(f"🎂【本日のお誕生日】\n今日は {month}月{day}日 です！\n{mentions} さん、誕生日おめでとう！🎉")
 
 # ダミーサーバー起動
