@@ -69,13 +69,13 @@ async def on_guild_join(guild):
     
     embed.add_field(
         name="🛠️ 最初にやること（管理者のみ）", 
-        value="`!setchannel`\n通知を飛ばしたいテキストチャンネルでこのコマンドを打つと、設定が完了します。", 
+        value="`bb!setbdch`\n通知を飛ばしたいテキストチャンネルでこのコマンドを打つと、設定が完了します。", 
         inline=False
     )
     
     embed.add_field(
         name="📝 メンバー用コマンド", 
-        value="`!birthday MM-DD`\n自分の誕生日を登録します。（例： `!birthday 01-23`）", 
+        value="`bb!setbday MM-DD`\n自分の誕生日を登録します。（例： `bb!setbday 01-23`）", 
         inline=False
     )
     
@@ -103,19 +103,19 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if message.content == "!help" or message.content == "!menu":
+    if message.content == "bb!help" or message.content == "bb!menu":
         embed = discord.Embed(
             title="🎂 誕生日通知ボット コマンド一覧",
             color=discord.Color.blue()
         )
-        embed.add_field(name="`!birthday MM-DD`", value="自分の誕生日を登録・変更します。(例: `!birthday 08-05`)", inline=False)
-        embed.add_field(name="`!setchannel`", value="【管理者専用】このチャンネルを誕生日通知先に設定します。", inline=False)
+        embed.add_field(name="`bb!setbday MM-DD`", value="自分の誕生日を登録・変更します。(例: `bb!setbday 08-05`)", inline=False)
+        embed.add_field(name="`bb!setbdch`", value="【管理者専用】このチャンネルを誕生日通知先に設定します。", inline=False)
         
         await message.channel.send(embed=embed)
         return
 
     # 通知チャンネルの設定コマンド
-    if message.content == "!setchannel":
+    if message.content == "bb!setbdch":
         if not message.author.guild_permissions.administrator:
             await message.channel.send("このコマンドは管理権限を持つユーザーのみ実行できます。")
             return
@@ -134,7 +134,7 @@ async def on_message(message):
         return
 
     # 誕生日登録コマンド
-    if message.content.startswith("!birthday"):
+    if message.content.startswith("bb!setbday"):
         try:
             _, date = message.content.split()
             datetime.strptime(date, "%m-%d")
@@ -156,7 +156,7 @@ async def on_message(message):
 
             await message.channel.send(f"{message.author.mention} の誕生日を {date} で登録したよ！")
         except ValueError:
-            await message.channel.send("使い方: `!birthday 01-23` のように入力してね")
+            await message.channel.send("使い方: `bb!setbday 01-23` のように入力してね")
 
 # 毎日朝9時に実行されるタスク
 @tasks.loop(time=NOTIFY_TIME)
