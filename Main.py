@@ -5,6 +5,8 @@ from datetime import datetime, time, timezone, timedelta
 import asyncio
 import os
 from keep_alive import keep_alive
+import firebase_admin  # ★追加
+from firebase_admin import credentials, db  # ★追加
 
 JST = timezone(timedelta(hours=9))
 NOTIFY_TIME = time(hour=9, minute=0, tzinfo=JST)
@@ -14,21 +16,34 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-DATA_FILE = "birthdays.json"
-CONFIG_FILE = "config.json"  # ★チャンネル設定を保存するファイル
+# --- ★Firebaseの初期化設定 ---
+# Renderの環境変数からFirebaseの秘密鍵（JSON文字列）を読み込む
+cred_json = json.loads(os.environ.get('FIREBASE_CREDENTIALS'))
+cred = credentials.Certificate(cred_json)
+firebase_admin.initialize_app(cred, {
+    'databaseURL': os.environ.get('FIREBASE_DB_URL')
+})
 
-# --- データ管理用の関数 ---
-def load_data(file_name):
+# ★ファイル名ではなく、データベース内の保存先の名前に変更
+DATA_FILE = "birthdays"
+CONFIG_FILE = "config"
+
+# --- ★データ管理用の関数をFirebase仕様に書き換え ---
+def load_data(node_name):
     try:
-        with open(file_name, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
+        ref = db.reference(node_name)
+        data = ref.get()
+        return data if data else {}  # データが空なら空の辞書を返す
+    except Exception as e:
+        print(f"データ読み込みエラー: {e}")
         return {}
 
-def save_data(file_name, data):
-    with open(file_name, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
+def save_data(node_name, data):
+    try:
+        ref = db.reference(node_name)
+        ref.set(data)  # クラウド上のデータを上書き保存
+    except Exception as e:
+        print(f"データ保存エラー: {e}")
 
 @client.event
 async def on_ready():
