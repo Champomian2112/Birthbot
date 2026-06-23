@@ -153,8 +153,8 @@ async def on_message(message):
                 
             data[guild_id]["birthdays"][user_id] = date
             save_data(SERVER_DATA_NODE, data)
-
-            await message.channel.send(f"{message.author.mention} の誕生日を {date} で登録したよ！")
+            month, day = date.split("-")
+            await message.channel.send(f"{message.author.mention} の誕生日を {month.lstrip('0')}月{day.lstrip('0')}日 で登録したよ！")
         except ValueError:
             await message.channel.send("使い方: `bb!setbday 01-23` のように入力してね")
 
@@ -182,7 +182,7 @@ async def check_birthdays():
 
         if today_celebrated:
             mentions = ", ".join(today_celebrated)
-            await channel.send(f"🎂【本日のお誕生日】\n{mentions} さん、お誕生日おめでとうございます！🎉")
+            await channel.send(f"🎂【本日のお誕生日】\n今日は {month}月{day}日 です！\n{mentions} さん、誕生日おめでとう！🎉")
 
 # ダミーサーバー起動
 keep_alive()
