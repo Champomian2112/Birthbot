@@ -163,8 +163,9 @@ async def on_message(message):
             await message.channel.send(f"{message.author.mention} の誕生日を {month.lstrip('0')}月{day.lstrip('0')}日 で登録したよ！")
         except ValueError:
             await message.channel.send("使い方: `bb!setbday 01-23` のように入力してね")
-            
-# 誕生日削除コマンド
+        return
+
+    # 誕生日削除コマンド
     if message.content == "bb!resetbday":
         data = load_data(SERVER_DATA_NODE)
         guild_id = str(message.guild.id)
