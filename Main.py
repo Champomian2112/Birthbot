@@ -115,6 +115,7 @@ async def on_message(message):
         )
         embed.add_field(name="`bb!setbday MM-DD`", value="自分の誕生日を登録・変更します。(例: `bb!setbday 08-05`)", inline=False)
         embed.add_field(name="`bb!setbdch`", value="【管理者専用】このチャンネルを誕生日通知先に設定します。", inline=False)
+        embed.add_field(name="`bb!resetbday`", value="自分の登録した誕生日を削除します。(誕生日通知が来なくなります。)", inline=False)
         
         await message.channel.send(embed=embed)
         return
@@ -162,7 +163,23 @@ async def on_message(message):
             await message.channel.send(f"{message.author.mention} の誕生日を {month.lstrip('0')}月{day.lstrip('0')}日 で登録したよ！")
         except ValueError:
             await message.channel.send("使い方: `bb!setbday 01-23` のように入力してね")
+            
+# 誕生日削除コマンド
+    if message.content == "bb!resetbday":
+        data = load_data(SERVER_DATA_NODE)
+        guild_id = str(message.guild.id)
+        user_id = str(message.author.id)
 
+        # データが存在し、かつユーザーの誕生日が登録されているか確認
+        if guild_id in data and "birthdays" in data[guild_id] and user_id in data[guild_id]["birthdays"]:
+            # 登録を削除
+            del data[guild_id]["birthdays"][user_id]
+            save_data(SERVER_DATA_NODE, data)
+            await message.channel.send(f"{message.author.mention} さんの誕生日登録を削除しました！")
+        else:
+            await message.channel.send(f"{message.author.mention} さんの登録されている誕生日が見つかりませんでした。")
+        return
+        
 # 毎日朝9時に実行されるタスク
 @tasks.loop(time=NOTIFY_TIME)
 async def check_birthdays():
